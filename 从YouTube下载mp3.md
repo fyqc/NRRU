@@ -17,7 +17,7 @@ youtube-dl官网：https://github.com/ytdl-org/youtube-dl
 
     pip install --upgrade youtube_dl
 
-![image](https://github.com/fyqc/NRRU/blob/main/IMG/%E4%BB%8EYouTube%E4%B8%8B%E8%BD%BDmp3_1.png)
+![image](https://raw.githubusercontent.com/fyqc/NRRU/main/IMG/%E4%BB%8EYouTube%E4%B8%8B%E8%BD%BDmp3_1.png)
 
 
 2. ### 分别安装ffmpeg和ffprobe
