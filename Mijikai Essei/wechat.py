@@ -1,10 +1,11 @@
 # 本代码用于下载桌面浏览器能够打开的腾讯微信公众号网页中所包含的图像
-# 新开发的版本
-# 现在时间：2021年4月22日16时59分45秒
+# 新开发版本
+# 现在时间：2021年4月22日17时30分43秒
 
 from bs4 import BeautifulSoup
 import requests
 import os
+from threading import Thread
 
 
 def get_soup_from_webpage(url, header):
@@ -79,8 +80,15 @@ if __name__ == '__main__':
     print(f"{find_title(soup)}")
     downlist = extract_image_url(soup)
     print(f"共找到{len(downlist)}张图片")
+    threads = []
     for img_url in downlist:
         print(f"第 {int(downlist.index(img_url)) + 1} 张： ", end='')
+        t = Thread(target = rillaget, args = [img_url, header])
+        t.start()
+        threads.append(t)
+    for t in threads:
+        t.join()
+        
         # rillaget(img_url, header)
 # 测试用
-        rillatest(img_url)
+        # rillatest(img_url)
