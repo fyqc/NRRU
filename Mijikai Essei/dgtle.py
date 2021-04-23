@@ -58,6 +58,14 @@ def find_author(soup):
 # EXTRACT IMAGE URL USING BS4
 def extract_image_url(soup):
     downlist = []
+    # 一些Article的文章下方会有评论区，会附带上作者的其它文章里面的图，甚至可能会有留言者附加的图片
+    # 这里的四行代码用于把整个评论区包括“XXXX的更多文章”去掉
+    # 用try……except……结构是为了防止在没有该部分的时候报错
+    try:
+        soup.find('div', class_="comment-hot-new-warp").decompose()
+    except:
+        pass
+    
     tags = soup.find_all('img')
     for n in tags:
 
