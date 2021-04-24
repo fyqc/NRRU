@@ -10,10 +10,7 @@ from threading import Thread
 '''
 
 
-# 现在时间：2021年4月23日02时07分35秒
-# ～～～～从头推倒重写一遍咯～～～～
-# 发现会把不是本篇文章里的图片也加载进来，需要在Soup中加以限定。
-# 明天在搞了
+# 现在时间：2021年4月24日13时19分52秒
 
 
 # GET WEBPAGE URL FROM SHORTCUT LINKAGES IN CERTAIN FOLDER
@@ -33,6 +30,8 @@ def internet_shortcut(rootdir):
 def get_soup_from_webpage(url, header):
     response = requests.get(url, headers=header)
     content = response.text
+    # 这里的编码应根据网页源码指定字符集做相应修改
+    response.encoding = 'utf-8' 
     soup = BeautifulSoup(content, 'lxml')
     return soup
 
@@ -114,24 +113,25 @@ def try_soup_ten_times(url, header):
                 break
     return dir_name, downlist
 
-# THE CORE OF THIS CODE IS DOWNLOAD IMAGE W/O ANY ISSUES.
-def rillaget(url, dir_name, header):
-    # 这一版和旧版最大的不同是把下载器做了拆分，不再负责分解downlist
-    # 只执行单个的url，这样做的目的是为了进行多线程加速
+def make_folder_asper_author(dir_name):
     if not os.path.exists(dir_name): 
         os.mkdir(dir_name)
+
+# THE CORE OF THIS CODE IS DOWNLOAD IMAGE W/O ANY ISSUES.
+def rillaget(url, dir_name):
+    # 这一版和旧版最大的不同是把下载器做了拆分，不再负责分解downlist
+    # 只执行单个的url，这样做的目的是为了进行多线程加速
     filename = url.split("/")[-1]
+    total_path = dir_name + '/' + filename
     attempts = 0
     success = False
     while attempts < 5 and not success:
         try:
-            total_path = dir_name + '/' + filename
-            response = requests.get(url, headers=header, timeout=30)
-            if 'Content-Length' in response.headers and len(response.content) == int(response.headers['Content-Length']):
-                with open(total_path, 'wb') as f:
+            response = requests.get(url)
+            if len(response.content) == int(response.headers['Content-Length']):
+                with open(total_path, 'wb') as fd:
                     for chunk in response.iter_content(1024):
-                        f.write(chunk)
-                    f.close()
+                        fd.write(chunk)
                 print(filename + "  下载成功")
                 success = True
             else:
@@ -146,12 +146,15 @@ if __name__ == '__main__':
     rootdir=r'D:\RMT\DGT'
     header = {
         "User-Agent": "Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:88.0) Gecko/20100101 Firefox/88.0"}
+
+# 测试时把以下部分注释掉
     webpage_list = internet_shortcut(rootdir)
     for URL in webpage_list:
         dir_name, downlist = try_soup_ten_times(URL, header)
+        make_folder_asper_author(dir_name)
         threads = []
         for url in downlist:
-            t = Thread(target = rillaget, args = [url, dir_name, header])
+            t = Thread(target = rillaget, args = [url, dir_name])
             t.start()
             threads.append(t)
         for t in threads:
