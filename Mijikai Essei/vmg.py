@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 from threading import Thread
 
 
-"""2021年11月11日"""
+"""2021年11月27日"""
 
 
 def get_soup_from_webpage(url, header):
@@ -50,13 +50,14 @@ def make_list(soup):
     postdict = {}
     div_archives = soup.find('div', class_='archives')
     tags_a = div_archives.find_all('a')
-    url_pre = 'https://www.vmgirls.com/'
+    # url_pre = 'https://www.vmgirls.com/'
     for tag in tags_a:
         post_num_html = tag['href']
-        if '17212' in post_num_html:  # <<<<<<<<<<<<<<<<<  2021年8月29日 采集到这里停止了
+        if '17984' in post_num_html:  # <<<<<<<<<<<<<<<<<  2021年11月27日 采集到这里停止了
             break
         post_title = tag.get_text()
-        posturl = url_pre + post_num_html
+        # posturl = url_pre + post_num_html
+        posturl = post_num_html
         # 这里要把第一项，也就是唯一一个带#的项滤掉
         # 'https://www.vmgirls.com/#': '全部展开/收缩'
         if '#' in posturl:
@@ -73,12 +74,17 @@ def download_single_post(single_post_soup, header):
         print("这个帖子不存在图片，跳过～～")
     else:
         downlist = list(set(downlist))  # 对downlist去重
+        # print(downlist)
         dir_name = 'D:/RMT/TRY/vmg/' + get_dir(single_post_soup)
         if not os.path.exists(dir_name):
             os.makedirs(dir_name)  # 建立文件夹
         threads = []
         for url in downlist:
             if not str(url).startswith('https://'):
+                print("混进来奇怪的url: " + url)
+                continue
+            # src="//t.cdn.ink/image/2021/11/x2021110119071930.jpeg.pagespeed.ic.3JAJcN96aD.jpg"
+            if "pagespeed.ic" in url:  # 发现于2021年11月22日
                 print("混进来奇怪的url: " + url)
                 continue
             t = Thread(target=rillaget, args=[url, dir_name, header])
@@ -183,24 +189,18 @@ def rillaget(url, dir_name, header):
             print(f'{filename}  下载失败 status_code:{response.status_code}')
 
 
-def get_soup_from_localhtml(webpage):
-    soup = BeautifulSoup(open(webpage, encoding='utf-8'), features='lxml')
-    # 抛弃网页中的垃圾元素，加快处理速度
-    for script in soup.find_all("script"):
-        script.decompose()
-    for style in soup.find_all("style"):
-        style.decompose()
-    return soup
-
-
 def bring_mms_home(header):
     top_list_soup = get_soup_from_webpage(
         'https://www.vmgirls.com/archives.html', header)
 
     postdict = make_list(top_list_soup)
 
+    if not postdict:
+        print("没有找到新的图片")
+
     for posturl in postdict:
         print(f'正在打开：  {posturl}  {postdict[posturl]}')
+
         # 为防止被托管服务器运营商抽中去做莫名其妙的5秒钟的“跳转”，加入以下代码
         single_post_soup = get_soup_from_webpage(posturl, header)
         while get_dir(single_post_soup) != postdict[posturl]:
@@ -262,3 +262,5 @@ if __name__ == '__main__':
 # TODO 17054 @ 7/19/2021
 # TODO 17212 @ 8/29/2021
 # TODO 17863 @ 11/10/2021
+# TODO 17780 @ 11/22/2021
+# TODO 17984 @ 11/27/2021
