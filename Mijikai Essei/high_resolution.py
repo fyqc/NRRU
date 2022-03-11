@@ -2,7 +2,6 @@ import os
 from PIL import Image
 
 SRC_FOLDER = 'D:\SRC'
-
 DEST_FOLDER = 'D:\DEST'
 
 # 遍历文件夹，筛选分辨率高的那一撮
