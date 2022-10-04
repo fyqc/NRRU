@@ -3,15 +3,47 @@ import requests
 from bs4 import BeautifulSoup
 from threading import Thread
 
-# 爬取Mobile01上照片原图的程式第二版
-# 2022年3月22日
+# Mobile01 images downloader 2nd Version
+# 10/4/2022
 
-# Fujifilm GFX50S II 評測報告｜6.5級 IBIS 超有感 規格齊備的中片幅之選！ - Mobile01
+# 掌握光線與影調｜《黑白攝影》漫談與實作！ - Mobile01
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 12_0_1) AppleWebKit/605.1.15 "
            "(KHTML, like Gecko) Version/15.0 Safari/605.1.15"}
-SAVE_DIRECTORY = r'F:\Pictures\Mobile01\2018\322'
-SAVE_DIRECTORY_H = r'F:\Pictures\Mobile01\2018\322'
+SAVE_DIRECTORY = r'D:\Lab\Pydownload\Mobile01\2022\104'
+
+
+def play():
+    soup = get_soup_from_localhtml("soup.html")
+    title = soup.title.string
+
+    print(title)
+
+    h_list, l_list, deleted_images_number_status_message = extract_image_url(
+        soup)
+
+    if not os.path.exists(SAVE_DIRECTORY):
+        os.makedirs(SAVE_DIRECTORY)
+
+    bring_mm_home((h_list + l_list), SAVE_DIRECTORY)
+    if deleted_images_number_status_message:
+        print(deleted_images_number_status_message)
+    recall_title(title)
+
+
+def recall_title(title):
+    print("\n", title, "\n")
+
+    # Sony FX30 評測報告
+    if " 評測報告" in title:
+        title = title.replace("評測報告", "")
+
+    # 「雙鏡評測」Canon RF24mm f/1.8 Macro & RF15-30mm f/4.5-6.3
+    if "」" in title:
+        title = title.split("」")[-1]
+
+    reanme_draft = title.split("｜")[0].strip()
+    print(reanme_draft)
 
 
 def withdraw_data_src(content):
@@ -32,8 +64,7 @@ def rillaget(url, dir_name, header):
 
         if response.status_code == requests.codes.ok:  # ok means 200 only
             with open(total_path, 'wb') as fd:
-                for chunk in response.iter_content(1024):
-                    fd.write(chunk)
+                fd.write(response.content)
             print(f"{filename}  下载成功")
         else:
             print(f"{url} 下载失败 状态码： {response.status_code}")
@@ -66,7 +97,6 @@ def extract_image_url(soup):
     # 高清部分
     tag_a = div_itemprop_articleBody.find_all('a')
 
-
     for content in tag_a:
 
         img_url_high_resolution = content.get('href')
@@ -85,27 +115,44 @@ def extract_image_url(soup):
                         r_downlist.append(img_url_repeat)
                     elif '//attach.mobile01.com/attach/' in img_url_repeat:
                         r_downlist.append("".join(['https:', img_url_repeat]))
+                else:
+                    img_url_repeat = item.get('src')
+                    if img_url_repeat:
+                        if 'https://attach.mobile01.com/attach/' in img_url_repeat:
+                            r_downlist.append(img_url_repeat)
+                        elif '//attach.mobile01.com/attach/' in img_url_repeat:
+                            r_downlist.append(
+                                "".join(['https:', img_url_repeat]))
             except:
                 pass
 
     # 非高清部分
     tag_img = div_itemprop_articleBody.find_all('img')
     for content in tag_img:
+
         img_url_low_resolution = content.get('data-src')
         if img_url_low_resolution:
             if 'https://attach.mobile01.com/attach/' in img_url_low_resolution:
                 l_downlist.append(img_url_low_resolution)
             elif '//attach.mobile01.com/attach/' in img_url_low_resolution:
                 l_downlist.append("".join(['https:', img_url_low_resolution]))
+        else:
+            img_url_low_resolution = content.get('src')
+            if img_url_low_resolution:
+                if 'https://attach.mobile01.com/attach/' in img_url_low_resolution:
+                    l_downlist.append(img_url_low_resolution)
+                elif '//attach.mobile01.com/attach/' in img_url_low_resolution:
+                    l_downlist.append(
+                        "".join(['https:', img_url_low_resolution]))
 
     # 剔除重复的非高清图片
     if len(r_downlist) < len(l_downlist):
-        print(f"已经智能剔除重复的图片{len(l_downlist)-len(r_downlist)}张")
+        deleted_images_number_status_message = f"已经智能剔除重复的图片{len(l_downlist)-len(r_downlist)}张"
         real_l_list = [i for i in l_downlist if i not in r_downlist]
     else:
         return h_downlist, l_downlist
 
-    return h_downlist, real_l_list
+    return h_downlist, real_l_list, deleted_images_number_status_message
 
 
 def bring_mm_home(downlist, directory):
@@ -118,27 +165,6 @@ def bring_mm_home(downlist, directory):
         t.join()
 
 
-def play():
-    soup = get_soup_from_localhtml("soup.html")
-    title = soup.title.string
-
-    print(title)
-
-    h_list, l_list = extract_image_url(soup)
-
-    if not os.path.exists(SAVE_DIRECTORY):
-        os.makedirs(SAVE_DIRECTORY)
-
-    if not os.path.exists(SAVE_DIRECTORY_H):
-        os.makedirs(SAVE_DIRECTORY_H)
-
-    bring_mm_home(h_list, SAVE_DIRECTORY_H)
-    bring_mm_home(l_list, SAVE_DIRECTORY)
-
-    print("\n", title, "\n")
-
 if __name__ == '__main__':
-
     play()
-
     print("～～完结撒花～～")
