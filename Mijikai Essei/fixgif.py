@@ -1,6 +1,6 @@
 import os
 
-# 用于修复损坏了的gif文件，以便可以在Windows 7的ACDSee 3.2上播放
+# 修复损坏了的gif文件，以便可以在Windows 7的ACDSee 3.2上播放
 
 DIRECTORY = r"D:\RMT\TRY\Review"
 TARGET = r"F:\Lab\giffix"
