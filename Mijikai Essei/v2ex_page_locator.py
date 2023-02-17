@@ -16,8 +16,6 @@ HEADER = {
 
 # 2023年2月17日
 
-FOLDER = r"D:\Rilla\v2ex"
-
 
 def get_soup_from_webpage(url, header, timeout=None):
     response = requests.get(url, headers=header, timeout=timeout)
@@ -29,29 +27,26 @@ def get_soup_from_webpage(url, header, timeout=None):
         style.decompose()
     return soup
 
-
 def shortcut_method():
-    # 读取手动保存的快捷方式的标题以获取上一次的offset值
+    # 读取手动保存的快捷方式的标题以获取上次看到的页数以及上一次的总页数
     for (_, _, filenames) in os.walk(os.getcwd()):
-        if len(filenames) == 1 and filenames[0].endswith('.URL'):
+        if len(filenames) == 2 and filenames[0].endswith('.URL'):
             key_numbers = filenames[0].replace(
                 "V2EX › 最近的主题 ", "").replace(".URL", "")
             old_current_page, old_total_page = key_numbers.split("_")
-            offset = int(old_total_page)-int(old_current_page)
-            # print(old_current_page, old_total_page, offset)
 
-    # 读取本次最新的总数
+    # 从 https://www.v2ex.com/recent?p=1 读取本次最新的总页数
     soup = get_soup_from_webpage("https://www.v2ex.com/recent?p=1", HEADER, 15)
     title = soup.title.get_text().replace("V2EX › 最近的主题 ", "").replace(".URL", "")
-    new_current_page, new_total_page = title.split("/")
-    # print(new_current_page, new_total_page)
+    new_total_page = title.split("/")[1]
+
 
     # 计算偏移值修正后的新起始位置
-    newly_added = int(new_total_page) - int(old_total_page)
-    new_position = int(old_current_page) + newly_added
+    offset = int(new_total_page) - int(old_total_page)
+    new_position = int(old_current_page) + offset
     print(f"请看第{new_position}页")
 
 
 if __name__ == '__main__':
-    os.chdir(FOLDER)
     shortcut_method()
+    input("")
