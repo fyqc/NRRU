@@ -1,16 +1,26 @@
 import os
+import shutil
 import requests
 from bs4 import BeautifulSoup
 from threading import Thread
+from PIL import Image
+Image.MAX_IMAGE_PIXELS = None
 
-# Mobile01 images downloader 2nd Version
-# 10/4/2022
 
-# 掌握光線與影調｜《黑白攝影》漫談與實作！ - Mobile01
+# yt-dlp -x --audio-format mp3 https://www.youtube.com/watch?v=6j0riQjd7Sc
+
+# Mobile01 images downloader 3nd Version
+# 8/20/2023
+
+# Wotancraft 「New Pilot 飛行員」18L 相機後背包｜直覺快取 機能性依舊！
+# 08-15
+# 吉姆林
+
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 12_0_1) AppleWebKit/605.1.15 "
            "(KHTML, like Gecko) Version/15.0 Safari/605.1.15"}
-SAVE_DIRECTORY = r'D:\Lab\Pydownload\Mobile01\2022\104'
+SAVE_DIRECTORY = r'G:\Mobile01\820'
+LOW_DIRECTORY = r'G:\Mobile01\820\LOW'
 
 
 def play():
@@ -26,9 +36,29 @@ def play():
         os.makedirs(SAVE_DIRECTORY)
 
     bring_mm_home((h_list + l_list), SAVE_DIRECTORY)
+
+    put_low_resolution_aside()
+
     if deleted_images_number_status_message:
         print(deleted_images_number_status_message)
     recall_title(title)
+
+
+
+def put_low_resolution_aside():
+    images = os.listdir(SAVE_DIRECTORY)
+    if images:
+        for image in images:
+            image_path = os.path.join(SAVE_DIRECTORY, image)
+            with Image.open(image_path) as picture:
+                image_width, image_height = picture.size
+            if image_width < 800:
+                if not os.path.exists(LOW_DIRECTORY):
+                    os.makedirs(LOW_DIRECTORY)
+                shutil.move(image_path, LOW_DIRECTORY)
+    
+    else:
+        print("获取图片失败")
 
 
 def recall_title(title):
@@ -37,6 +67,9 @@ def recall_title(title):
     # Sony FX30 評測報告
     if " 評測報告" in title:
         title = title.replace("評測報告", "")
+
+    if " - Mobile01" in title:
+        title = title.replace(" - Mobile01", "")
 
     # 「雙鏡評測」Canon RF24mm f/1.8 Macro & RF15-30mm f/4.5-6.3
     if "」" in title:
@@ -61,11 +94,11 @@ def rillaget(url, dir_name, header):
 
     try:
         response = requests.get(url, headers=header, timeout=50)
-
         if response.status_code == requests.codes.ok:  # ok means 200 only
             with open(total_path, 'wb') as fd:
                 fd.write(response.content)
             print(f"{filename}  下载成功")
+
         else:
             print(f"{url} 下载失败 状态码： {response.status_code}")
 
