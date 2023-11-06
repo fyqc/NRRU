@@ -10,8 +10,11 @@ from threading import Thread
 '''
 
 
-# 现在时间：2021年7月15日22时13分57秒
-# 发现大量错误，可能网站又改版了
+# 2023年11月6日
+# https://www.dgtle.com/inst-1893720-1.html
+# 发现以上帖子访问时出错，正文提示：
+# 无法找到内容
+# 内容已删除或正在审核，稍候再看吧~
 
 
 def internet_shortcut(rootdir = os.getcwd()):
@@ -21,7 +24,7 @@ def internet_shortcut(rootdir = os.getcwd()):
     webpage_list = []
     for (_, _, filenames) in os.walk(rootdir):
         for filename in filenames:
-            if filename.endswith('.URL'):
+            if filename.lower().endswith('.url'):
                 with open(rootdir + '/' + filename, "r", encoding='utf-8') as f:
                     webpage = f.read().split('\n')[1][4:]
                     # Just be sure the data we acquired is URL
@@ -112,6 +115,11 @@ def try_soup_ten_times(url, header):
             # soup = get_soup_from_localhtml('arti.html') # 测试用
             title = find_title(soup)
             print(title)
+            if title == " 数字尾巴 分享美好数字生活":
+                print("帖子大概被和谐了")
+            if "无法找到内容" in soup.get_text() or "内容已删除或正在审核" in soup.get_text():
+                print("惋惜，下一个！")
+                return ("404","404")
             dir_name = find_author(soup)
             downlist = extract_image_url(soup)
             print(f'Author is: {dir_name}')
@@ -125,7 +133,7 @@ def try_soup_ten_times(url, header):
             print("继续……")
             if soup_attemp == 10:
                 print("算了，放弃吧。")
-                break
+                return ("404","404")
     return dir_name, downlist
 
 
@@ -144,7 +152,7 @@ def rillaget(link, dir_name, header):
     total_path = dir_name + '/' + filename
     attempts = 0
     success = False
-    while attempts < 5 and not success:
+    while attempts < 8 and not success:
         try:
             response = requests.get(link, headers=header, timeout=5)
             
@@ -155,10 +163,11 @@ def rillaget(link, dir_name, header):
                 print(filename + "  下载成功")
                 success = True
         except:
-            print(f'尝试下载 {filename} 时发生网络错误，等待5秒钟后进行第{attempts + 1}次尝试')
-            time.sleep(5)
+            # 以等差数列添加等待时间间隔
+            print(f'尝试下载 {filename} 时发生网络错误，等待{5*attempts + 5}秒钟后进行第{attempts + 1}次尝试')
+            time.sleep(5*attempts + 5)
             attempts += 1
-    if attempts == 5:
+    if attempts == 8:
         print(f"{filename} 下载失败")
 
 
@@ -170,6 +179,8 @@ if __name__ == '__main__':
     webpage_list = internet_shortcut()
     for weblink in webpage_list:
         dir_name, downlist = try_soup_ten_times(weblink, header)
+        if downlist == "404":
+            continue
         make_folder_asper_author(dir_name)
         threads = []
         for link in downlist:
@@ -187,6 +198,4 @@ if __name__ == '__main__':
     # print(len(downlist))
 
 # 以下是排故代码
-    # URL = 'https://www.dgtle.com/article-1650832-1.html'
-    # dir_name, downlist = try_soup_ten_times(URL, header)
-    # print(downlist)
+    # URL = 'https://www.dgtle.com/inst-1893720-1.html'
