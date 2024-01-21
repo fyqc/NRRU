@@ -10,14 +10,14 @@ from threading import Thread
 '''
 
 
-# 2023年11月6日
-# https://www.dgtle.com/inst-1893720-1.html
-# 发现以上帖子访问时出错，正文提示：
-# 无法找到内容
-# 内容已删除或正在审核，稍候再看吧~
+# 2024年1月20日
+# https://www.dgtle.com/article-1698217-1.html
+# 发现获取到的图片文件名有错：
+# 2e6b7202401012057028574.Zuiko PRO」开向山的大门
+# 151b0202401012055402463.Zuiko PRO」Ferrymead Station全貌
 
 
-def internet_shortcut(rootdir = os.getcwd()):
+def internet_shortcut(rootdir=os.getcwd()):
     '''
     GET WEBPAGE URL FROM SHORTCUT LINKAGES IN CERTAIN FOLDER.
     '''
@@ -25,12 +25,13 @@ def internet_shortcut(rootdir = os.getcwd()):
     for (_, _, filenames) in os.walk(rootdir):
         for filename in filenames:
             if filename.lower().endswith('.url'):
-                with open(rootdir + '/' + filename, "r", encoding='utf-8') as f:
+                with open(os.path.join(rootdir, filename), "r", encoding='utf-8') as f:
                     webpage = f.read().split('\n')[1][4:]
                     # Just be sure the data we acquired is URL
                     if webpage.startswith('http'):
                         webpage_list.append(webpage)
     return webpage_list
+
 
 def get_soup_from_webpage(url, header):
     '''
@@ -90,8 +91,10 @@ def extract_image_url(soup):
         # 修剪杂枝
         # 2021年7月15日出现一种新格式的图片，没有后缀，实际为jpg
         # http://s1.dgtle.com/dgtle_img/article/2021/07/15/74e7f202107151213512077_1800_500_w
+        # 因为这是实际图片的url，所以不能在此添加后缀名，而是应去下载器那里把文件名改掉
         img_url = raw_img_url.replace('_1800_500_w.', '.').split("?")[0]
         img_url = img_url.replace('_1800_500.', '.').split("?")[0]
+
         if 'dgtle_img/article' in img_url or 'dgtle_img/ins' in img_url:
             downlist.append(img_url)
 
@@ -119,7 +122,7 @@ def try_soup_ten_times(url, header):
                 print("帖子大概被和谐了")
             if "无法找到内容" in soup.get_text() or "内容已删除或正在审核" in soup.get_text():
                 print("惋惜，下一个！")
-                return ("404","404")
+                return ("404", "404")
             dir_name = find_author(soup)
             downlist = extract_image_url(soup)
             print(f'Author is: {dir_name}')
@@ -133,7 +136,7 @@ def try_soup_ten_times(url, header):
             print("继续……")
             if soup_attemp == 10:
                 print("算了，放弃吧。")
-                return ("404","404")
+                return ("404", "404")
     return dir_name, downlist
 
 
@@ -147,15 +150,19 @@ def rillaget(link, dir_name, header):
     THE CORE OF THIS CODE IS DOWNLOAD IMAGE W/O ANY ISSUES.
     '''
     filename = link.split("/")[-1]
-    if filename[-11:] == "_1800_500_w":
-        filename = "".join([filename, '.jpg'])
-    total_path = dir_name + '/' + filename
+
+    # 2024年1月20日，发现某些图片没有后缀，但实为jpeg格式：
+    # http://s1.dgtle.com/dgtle_img/article/2024/01/01/2e6b7202401012057028574_1800_500_w.Zuiko PRO」开向山的大门
+    if '.' not in filename[-6:]:
+        filename = "".join([filename, '.jpeg'])
+    total_path = os.path.join(dir_name, filename)
+
     attempts = 0
     success = False
     while attempts < 8 and not success:
         try:
             response = requests.get(link, headers=header, timeout=5)
-            
+
             if len(response.content) == int(response.headers['Content-Length']):
                 with open(total_path, 'wb') as fd:
                     for chunk in response.iter_content(1024):
@@ -164,9 +171,11 @@ def rillaget(link, dir_name, header):
                 success = True
         except:
             # 以等差数列添加等待时间间隔
-            print(f'尝试下载 {filename} 时发生网络错误，等待{5*attempts + 5}秒钟后进行第{attempts + 1}次尝试')
+            print(
+                f'尝试下载 {filename} 时发生网络错误，等待{5*attempts + 5}秒钟后进行第{attempts + 1}次尝试')
             time.sleep(5*attempts + 5)
             attempts += 1
+
     if attempts == 8:
         print(f"{filename} 下载失败")
 
@@ -197,5 +206,33 @@ if __name__ == '__main__':
     # print(downlist)
     # print(len(downlist))
 
+
 # 以下是排故代码
-    # URL = 'https://www.dgtle.com/inst-1893720-1.html'
+    # URL = 'https://www.dgtle.com/article-1698217-1.html'
+    # # dir_name, downlist = try_soup_ten_times(URL, header)
+    # # print(downlist)
+    # soup = get_soup_from_webpage(URL, header)
+    # # print(soup.get_text())
+
+    # title = find_title(soup)
+    # if title == " 数字尾巴 分享美好数字生活":
+    #     print("帖子大概被和谐了")
+    #     if "无法找到内容" in soup.get_text() or "内容已删除或正在审核" in soup.get_text():
+    #         print("惋惜，下一个！")
+    # else:
+    #     print(title)
+
+    # downlist = extract_image_url(soup)
+    # print(downlist)
+    # print(len(downlist))
+
+    '''
+    <div>
+        <figure class="img-alt-wap">
+            <img src="http://s1.dgtle.com/dgtle_img/default/default_placeholder.png"  data-original="http://s1.dgtle.com/dgtle_img/article/2024/01/01/9b928202401011722517737_1800_500_w" class="img-cover img-layz" >
+        </figure>
+        <p class="" style="text-align: center;">
+            此次探险的起点
+        </p>
+    </div>
+    '''
