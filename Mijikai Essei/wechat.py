@@ -12,7 +12,7 @@ import time
 
 
 # 本代码用于下载桌面浏览器能够打开的腾讯微信公众号网页中所包含的图像
-# 2024年7月6日
+# 2024年7月16日
 
 
 HEADER = {
@@ -75,7 +75,6 @@ def make_name_valid(validname):
     validname = validname.replace('\t', '_')
     validname = validname.replace('\r', '_')
     validname = validname.replace('\n', '_')
-    # \xa0 Unicode represents a hard space or a no-break space in a program.
     validname = validname.replace('\xa0', '')
     validname = validname.replace('～', '')
     validname = validname.strip()
@@ -110,14 +109,22 @@ def extract_image_from_cdn_version_page(content: str) -> list:
         # 去重
         downlist = list(set(cleaned_urls))
         return downlist
+
     else:
         print("No image URLs found.")
+        return None
 
 
 def find_filename(img_url: str) -> str:
     if "wx_fmt=" in img_url:
         img_format = img_url.split("wx_fmt=")[-1]
-
+        
+        # 2024年7月16日，发现这种图片：
+        # https://mmbiz.qpic.cn/sz_mmbiz_jpg/Z6ESibMhwr3m7puDYOkBwS115anW84aNImV1NYWgRMEqACTk2ABWR1OWTEqzKluIQtZ5j3iaNUECsff5wHyAmEmw/640?wx_fmt=jpeg/format,webp
+        # 640?wx_fmt=jpeg/format,webp
+        if img_format == "jpeg/format,webp" and "640?wx_fmt=jpeg/format,webp" in img_url:
+            return "640.jpg"
+            
         # 2024年4月24日，微信又使坏：
         # ct19v2f1gLoUVDMdY95YDiaLdgc8orQMH2M3ITZDPkKHK5Vxn4VqHtmw.jpeg&wxfrom=5&wx_lazy=1&wx_co=1
         if '&' in img_format:
@@ -150,7 +157,11 @@ def find_title(url: str, soup: BeautifulSoup):
             web_title = meta_web_title['content']
 
         except TypeError:
-            return "The content has been deleted by the author."
+            try:
+                web_title = soup.find(
+                    'div', class_='weui-msg__title warn').get_text().strip()
+            except Exception as e:
+                print(e)
 
     return web_title
 
@@ -163,6 +174,11 @@ def rillaget(url: str, title: str, header: str) -> None:
 
         # Ensure directory exists
         os.makedirs(os.path.dirname(total_path), exist_ok=True)
+
+        # Skip existing file
+        if os.path.exists(total_path):
+            print(f"file already exists: {total_path}")
+            return
 
         response = requests.get(url, headers=header, stream=True, timeout=30)
 
@@ -191,6 +207,10 @@ def rillaget(url: str, title: str, header: str) -> None:
         else:
             print(f"Failed to download {url}. HTTP Status Code: {
                   response.status_code}")
+
+    except OSError as f:
+        # "Cannot create a file when that file already exists"
+        print(f)
 
     except Exception as e:
         print(f"Error occurred while downloading {url}:\n{str(e)}")
@@ -228,13 +248,13 @@ def normal():
     for index, url in enumerate(URLS, start=1):
 
         soup, content = get_soup_from_webpage(url, HEADER, 15)
-        # soup, content = get_soup_from_localhtml('soup.html')
 
-        # soup = BeautifulSoup(content, features='lxml')
         title = find_title(url, soup)
-        if title == "The content has been deleted by the author.":
-            print(f"{index} 来晚了，内容被和谐了。（；´д｀）ゞ {url}")
+        if title == "The content has been deleted by the author." or title == "该内容已被发布者删除":
+            print(f"  {index} 来晚了，内容被和谐了。（；´д｀）ゞ  ".center(78, "#"))
+            print(url)
             continue
+
 
         print(index, title, url)
 
@@ -242,12 +262,6 @@ def normal():
         if not downlist:
             print("cdn")
             downlist = extract_image_from_cdn_version_page(content)
-
-        # downlist = set(downlist)
-
-        # for link in downlist:
-        #     print(link)
-            # print(find_filename(link))
 
         # skip emoji
         for link in downlist[:]:
