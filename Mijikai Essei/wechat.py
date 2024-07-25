@@ -1,18 +1,18 @@
+import hashlib
 import os
-import sys
 import shutil
+import subprocess
+import re
 import requests
+import time
 from bs4 import BeautifulSoup
 from PIL import Image
 from threading import Thread
-from urllib.parse import quote, unquote  # URL中文转义
-import re
-import hashlib
-import time
+from urllib.parse import quote, unquote
 
 
 # 本代码用于下载桌面浏览器能够打开的腾讯微信公众号网页中所包含的图像
-# 2024年7月16日
+# 2024年7月25日
 
 
 HEADER = {
@@ -60,9 +60,8 @@ def get_soup_from_webpage(url: str, header: str, timeout=None):
     return soup, content
 
 
-def make_name_valid(validname):
+def make_name_valid(validname: str) -> str:
     validname = validname.replace('\\', '_')
-    validname = validname.replace('.', '_')
     validname = validname.replace('/', '_')
     validname = validname.replace(':', '_')
     validname = validname.replace('*', '_')
@@ -75,8 +74,11 @@ def make_name_valid(validname):
     validname = validname.replace('\t', '_')
     validname = validname.replace('\r', '_')
     validname = validname.replace('\n', '_')
+    # \xa0 Unicode represents a hard space or a no-break space in a program.
     validname = validname.replace('\xa0', '')
     validname = validname.replace('～', '')
+    # 在 Windows 系统中建立文件夹时名字的最后不能是“．”，不论你加多少个点，都会被 Windows 忽略。
+    validname = validname.rstrip(".")
     validname = validname.strip()
     return validname
 
@@ -97,7 +99,7 @@ def extract_image_url(soup: BeautifulSoup) -> list:
     # 去重
     downlist = list(set(raw_down_list))
     return downlist
-
+    
 
 def extract_image_from_cdn_version_page(content: str) -> list:
     pattern = r"cdn_url:\s*'([^']*)'"
@@ -116,37 +118,12 @@ def extract_image_from_cdn_version_page(content: str) -> list:
 
 
 def find_filename(img_url: str) -> str:
-    if "wx_fmt=" in img_url:
-        img_format = img_url.split("wx_fmt=")[-1]
-        
-        # 2024年7月16日，发现这种图片：
-        # https://mmbiz.qpic.cn/sz_mmbiz_jpg/Z6ESibMhwr3m7puDYOkBwS115anW84aNImV1NYWgRMEqACTk2ABWR1OWTEqzKluIQtZ5j3iaNUECsff5wHyAmEmw/640?wx_fmt=jpeg/format,webp
-        # 640?wx_fmt=jpeg/format,webp
-        if img_format == "jpeg/format,webp" and "640?wx_fmt=jpeg/format,webp" in img_url:
-            return "640.jpg"
-            
-        # 2024年4月24日，微信又使坏：
-        # ct19v2f1gLoUVDMdY95YDiaLdgc8orQMH2M3ITZDPkKHK5Vxn4VqHtmw.jpeg&wxfrom=5&wx_lazy=1&wx_co=1
-        if '&' in img_format:
-            img_format = img_format.split("&")[0]
-
-        # https://mmbiz.qpic.cn/sz_mmbiz_jpg/aiauu2lGXR28QkTDPwicxYaZ3vtzGCbHicibYsdtJmYMibhiaWfjZoAM7tpR9Ad6F2tcDuSg5tOQUuySiaw3ibCmdEF5xA/640?wx_fmt=other&from=appmsg&wxfrom=5&wx_lazy=1&wx_co=1&tp=webp
-        if img_format == 'other' and 'tp=webp' in img_url:
-            img_format = "webp"
-
-    # https://mmbiz.qpic.cn/mmbiz_jpg/2Gd6nk4y4a9HnbVElBXgSxa7XzL0ekkySkiczOUpauoVh1eVYaFibOySp1dhH6ZlGicsRQ5fXyHXM8ibpwoGIlfqIQ/640?from=appmsg
-    elif "https://mmbiz.qpic.cn/mmbiz_jpg/" in img_url:
-        img_format = ".jpg"
-        filename = img_url.split("/")[-2][33:] + img_format
-        return filename
-
-    filename_without_format = img_url.split("/")[-2][33:]
-    filename = filename_without_format + '.png'
-
-    return filename
+    # Rewrite this function, move 'image format decision' to downloader
+    if 'mmbiz.qpic.cn' in img_url:
+        return img_url.split("/")[-2]
 
 
-def find_title(url: str, soup: BeautifulSoup):
+def find_title(url: str, soup: BeautifulSoup) -> str:
     try:
         web_title = soup.find(
             'h1', class_='rich_media_title').get_text().strip()
@@ -166,24 +143,26 @@ def find_title(url: str, soup: BeautifulSoup):
     return web_title
 
 
-def rillaget(url: str, title: str, header: str) -> None:
+def rillaget(url: str, folder_path: str, header: str) -> None:
     try:
-        filename = find_filename(url)
-        total_path = os.path.join(
-            SAVE_DIRECTORY, make_name_valid(title), filename)
-
-        # Ensure directory exists
-        os.makedirs(os.path.dirname(total_path), exist_ok=True)
-
-        # Skip existing file
-        if os.path.exists(total_path):
-            print(f"file already exists: {total_path}")
-            return
-
         response = requests.get(url, headers=header, stream=True, timeout=30)
 
         # Check if response is successful
         if response.status_code == 200:
+
+            # Figure out image real format
+            content_type_name = response.headers.get('Content-Type')
+            image_format = content_type_name.split('/')[-1]
+
+            filename = ".".join([find_filename(url), image_format])
+            total_path = os.path.join(
+                SAVE_DIRECTORY, folder_path, filename)
+
+            # Skip existing file
+            if os.path.exists(total_path):
+                print(f"file already exists: {total_path}")
+                return
+
             expected_length = int(response.headers.get('Content-Length', 0))
             current_length = 0
 
@@ -196,17 +175,12 @@ def rillaget(url: str, title: str, header: str) -> None:
                     if current_length >= expected_length:
                         break
 
-            # Conver WebP to PNG
-            if '.webp' in total_path:
-                print(f"Found Webp! {repr(total_path)}")
-                webp_to_png(repr(total_path))
-
             # Use md5 to rename the file
             rename_to_md5(total_path)
 
         else:
-            print(f"Failed to download {url}. HTTP Status Code: {
-                  response.status_code}")
+            print(
+                f"Failed to download {url}. HTTP Status Code: {response.status_code}")
 
     except OSError as f:
         # "Cannot create a file when that file already exists"
@@ -214,15 +188,6 @@ def rillaget(url: str, title: str, header: str) -> None:
 
     except Exception as e:
         print(f"Error occurred while downloading {url}:\n{str(e)}")
-
-
-def webp_to_png(webp_filepath):
-    save_path = webp_filepath.replace('webp', 'png')
-    cmd = f'{STATIC} "{webp_filepath}" -o "{save_path}"'
-    print(cmd)
-    os.system(cmd)
-    os.remove(webp_filepath)
-    sys.exit()
 
 
 def rename_to_md5(filepath):
@@ -244,17 +209,34 @@ def get_md5(filepath):
     return md5_returned
 
 
+def webp_to_png(folder_path):
+    for file in os.listdir(folder_path):
+        if ".webp" in file:
+            webp_path = os.path.join(folder_path, file)
+            print(f"Found Webp! {webp_path}")
+            png_path = webp_path.replace('webp', 'png')
+            cmd = f'{STATIC} "{webp_path}" -o "{png_path}"'
+            result = subprocess.run(
+                cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            if result.returncode != 0:
+                print("Error occurred:", result.stderr.decode())
+            else:
+                os.remove(webp_path)
+                
+
 def normal():
     for index, url in enumerate(URLS, start=1):
 
         soup, content = get_soup_from_webpage(url, HEADER, 15)
+        # soup, content = get_soup_from_localhtml('soup.html')
 
         title = find_title(url, soup)
         if title == "The content has been deleted by the author." or title == "该内容已被发布者删除":
             print(f"  {index} 来晚了，内容被和谐了。（；´д｀）ゞ  ".center(78, "#"))
+            print(title)
             print(url)
+            print()
             continue
-
 
         print(index, title, url)
 
@@ -269,16 +251,32 @@ def normal():
                 downlist.remove(link)
                 continue
 
+        # Only if downlist is not empty
+        if not len(downlist):
+            print("没有发现图片，建议排故")
+            print()
+            break
+
+        # Check if folder is there, if not, create one
+        folder_path = os.path.join(
+            SAVE_DIRECTORY, make_name_valid(title))
+
+        # Ensure directory exists
+        if not os.path.exists(folder_path):
+            os.mkdir(folder_path)
+
         print(f"共找到{len(downlist)}张图片")
 
         threads = []
         for img_url in downlist:
-            t = Thread(target=rillaget, args=[img_url, title, HEADER])
+            t = Thread(target=rillaget, args=[img_url, folder_path, HEADER])
             t.start()
             threads.append(t)
         for t in threads:
             t.join()
 
+        # Check and convert WebP to PNG
+        webp_to_png(folder_path)
         print()
 
 
