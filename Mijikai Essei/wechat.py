@@ -117,30 +117,41 @@ def extract_image_from_cdn_version_page(content: str) -> list:
         return None
 
 
-def find_filename(img_url: str) -> str:
-    # Rewrite this function, move 'image format decision' to downloader
-    if 'mmbiz.qpic.cn' in img_url:
-        return img_url.split("/")[-2]
-
-
 def find_title(url: str, soup: BeautifulSoup) -> str:
-    try:
-        web_title = soup.find(
-            'h1', class_='rich_media_title').get_text().strip()
+    tag_title = soup.find(
+        'h1', class_='rich_media_title')
 
-    except AttributeError:
-        try:
-            meta_web_title = soup.find("meta", property="og:title")
-            web_title = meta_web_title['content']
+    if tag_title:
+        return tag_title.get_text().strip()
+    else:
+        meta_web_title = soup.find("meta", property="og:title")
 
-        except TypeError:
-            try:
-                web_title = soup.find(
-                    'div', class_='weui-msg__title warn').get_text().strip()
-            except Exception as e:
-                print(e)
+    if meta_web_title:
+        return meta_web_title['content']
+    else:
+        tag_h2 = soup.find(
+            'h2', class_='weui-msg__title title')
 
-    return web_title
+    if tag_h2:
+        return tag_h2.get_text()
+    else:
+        tag_div = soup.find(
+            'div', class_='weui-msg__title warn'
+        )
+
+    if tag_div:
+        return tag_div.get_text()
+    else:
+        tag_script = soup.find('script')
+
+    if tag_script:
+        script_content = tag_script.string
+        if 'Weixin Official Accounts Platform' in script_content:
+            return 'Weixin Official Accounts Platform'
+        else:
+            '革命尚未成功 同志仍需努力 （未能识别标题，请修改代码）'
+    else:
+        return '革命尚未成功 同志仍需努力 （未能识别标题，请修改代码）'
 
 
 def rillaget(url: str, folder_path: str, header: str) -> None:
@@ -154,7 +165,7 @@ def rillaget(url: str, folder_path: str, header: str) -> None:
             content_type_name = response.headers.get('Content-Type')
             image_format = content_type_name.split('/')[-1]
 
-            filename = ".".join([find_filename(url), image_format])
+            filename = ".".join([url.split("/")[-2], image_format])
             total_path = os.path.join(
                 SAVE_DIRECTORY, folder_path, filename)
 
@@ -227,16 +238,32 @@ def webp_to_png(folder_path):
 def normal():
     for index, url in enumerate(URLS, start=1):
 
-        soup, content = get_soup_from_webpage(url, HEADER, 15)
-        # soup, content = get_soup_from_localhtml('soup.html')
+        soup, content = get_soup_from_webpage(url, HEADER, timeout = 15)
 
         title = find_title(url, soup)
-        if title == "The content has been deleted by the author." or title == "该内容已被发布者删除":
+        
+        if title == 'Weixin Official Accounts Platform':
+            print("疑似遇到服务器抽风，等待5秒钟后重试")
+            time.sleep(5)
+            soup, content = get_soup_from_webpage(url, HEADER, timeout = 15)
+            title = find_title(url, soup)
+
+        gfw_title = [
+            "The content has been deleted by the author.",
+            "该内容已被发布者删除",
+            "此账号已被屏蔽, 内容无法查看",
+        ]
+
+        if title in gfw_title:
             print(f"  {index} 来晚了，内容被和谐了。（；´д｀）ゞ  ".center(78, "#"))
             print(title)
             print(url)
             print()
             continue
+
+        if title == "革命尚未成功 同志仍需努力 （未能识别标题，请修改代码）":
+            print(soup)
+            break
 
         print(index, title, url)
 
