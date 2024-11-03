@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 from PIL import Image
 from threading import Thread
 
+
 """
 用于微信公众号中的诸多图片保存
 
@@ -19,37 +20,65 @@ from threading import Thread
 将WebP自动转换为PNG
 
 操作说明：
-把URL复制进来，放在列表中
+从icloud那里把URL复制进来，放在download.txt中
 然后执行，就可以在目标文件夹中生成以标题为文件夹名的文件夹，里面是帖子中的图片
 """
 
-# 2024年10月29日
+# 2024年11月2日
+# 不再将重复文件移入临时文件夹，直接删除
+# 将原先的列表改进为txt文档
+# 发现漏下了一些图片，遂使用正则表达式一把梭
 
 logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
     # level=logging.DEBUG,
     level=logging.INFO,
-    handlers=[logging.FileHandler(filename='tencent.log',mode='w',encoding='utf-8')]
+    handlers=[logging.FileHandler(
+        filename='tencent.log', mode='w', encoding='utf-8')]
 )
+
+"""
+日志级别     使用场景
+DEBUG 	    最低级别。用于小细节。通常只有在诊断问题时，你才会关心这些消息
+INFO 	    用于记录程序中一般事件的信息，或确认一切工作正常
+WARNING 	用于表示可能的问题，它不会阻止程序的工作，但将来可能会
+ERROR 	    用于记录错误，它导致程序做某事失败
+CRITICAL 	最高级别。用于表示致命的错误，它导致或将要导致程序完全停止工作
+
+日志级别重要程度逐次提高，logging分别提供了5个对应级别的方法。默认情况下日志的级别是WARGING， 低于WARING的日志信息都不会输出。
+从最不重要到最重要。利用不同的日志函数，消息可以按某个级别记入日志。
+"""
+
 
 HEADER = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36'
     ' (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 Edg/91.0.864.70',
+    'Accept-Language': 'en-US,en;q=0.5',
 }
 
-STATIC = r"D:\Lab\dwebp.exe"  # 用于转换Webp格式为PNG
-SAVE_DIRECTORY = r"D:\wc"
+STATIC = r"F:\Lab\libwebp-1.4.0-windows-x64\bin\dwebp.exe"
+SAVE_DIRECTORY = r"D:\RMT\TRY\tecent public"
+DATABSE = r"D:\RMT\TRY\Wechat\wc.json"
+ICLOUD = r"D:\RMT\TRY\Wechat\download.txt"
 
-# 针对性修改此处
-URLS = [
 
-"https://mp.weixin.qq.com/s/C4BTn_YOcn8A7ANQq6Xw2A",
+def get_urls_from_download_txt(ICLOUD):
+    urls = []
+    with open(ICLOUD, 'r') as f:
+        content = f.readlines()
+        for line in content:
+            if line.startswith('https'):
+                urls.append(line.strip('\n'))
+    return urls
 
-"https://mp.weixin.qq.com/s/ZK2-BaoiDluQphSJRvKWmw",
 
-"https://mp.weixin.qq.com/s/wrg_qVA7LLNdO26cq8pP8g",
+def get_soup_from_localhtml(webpage):
+    with open(webpage, 'r', encoding='utf-8') as file:
+        content = file.read()
+    soup = BeautifulSoup(content, features='lxml')
 
-]
+    return soup, content
+
 
 def get_soup_from_webpage(url: str, header: str, timeout=None):
     attempts = 0
@@ -103,36 +132,21 @@ def make_name_valid(validname: str) -> str:
 def extract_image_using_re_only(content: str) -> list:
     # cdn_url: 'https://mmbiz.qpic.cn/mmbiz_jpg/AicOhKNCfiaD9SHrapreD260eWviaANiaB100VoiasAeZicAo7Hl0qVTwKfzAUWB5Su4zhuQrtWK4OCwcgCnibUUbaL1g/0?wx_fmt=jpeg',
     # 'cdn_url':'https://mmbiz.qpic.cn/sz_mmbiz_gif/r7UskC2NBNCgceEu9iazYtvRMKezh8uAgScic6l4aM2BWwwcibmh50ofnI5uiaGAKRwDvXvWZYAS9VZdLttNhGDIxQ/640?wx_fmt=gif\x26amp;amp;from=appmsg'
-    
+
     pattern = r"(?:['\"]?cdn_url['\"]?)\s*:\s*['\"]https?://mmbiz[^\s\"']*['\"]"
-    
+
     cdn_urls = re.findall(pattern, content)
 
     logging.debug(cdn_urls)
-    
+
     if cdn_urls:
         # https://mmbiz.qpic.cn/mmbiz_jpg/AicOhKNCfiaD9SHrapreD260eWviaANiaB100VoiasAeZicAo7Hl0qVTwKfzAUWB5Su4zhuQrtWK4OCwcgCnibUUbaL1g/0?wx_fmt=jpeg
-        cleaned_urls = [url.replace(" ","").split(":'")[-1].split("\\")[0] for url in cdn_urls]
+        cleaned_urls = [url.replace(" ", "").split(
+            ":'")[-1].split("\\")[0] for url in cdn_urls]
 
         # 去重
         downlist = list(set(cleaned_urls))
 
-        return downlist
-
-    else:
-        print("No image URLs found.")
-        return None
-    
-
-def extract_image_from_cdn_version_page(content: str) -> list:
-    pattern = r"cdn_url:\s*'([^']*)'"
-
-    raw_down_list = re.findall(pattern, content)
-    cleaned_urls = [url.split("\\")[0] for url in raw_down_list]
-
-    if raw_down_list:
-        # 去重
-        downlist = list(set(cleaned_urls))
         return downlist
 
     else:
@@ -211,7 +225,7 @@ def rillaget(url: str, folder_path: str, header: str) -> None:
                         break
 
             # Use md5 to rename the file
-            rename_to_md5(total_path)
+            rename_to_sha256(total_path)
 
         else:
             print(
@@ -229,28 +243,9 @@ def rillaget(url: str, folder_path: str, header: str) -> None:
         logging.error(f"Error occurred while downloading {url}:\n{str(e)}")
 
 
-def rename_to_md5(filepath):
+def rename_to_sha256(filepath):
     file_name = filepath.split("\\")[-1].split(".")[0]
-    new_name = get_md5(filepath)
-    new_path = filepath.replace(file_name, new_name)
-    os.rename(filepath, new_path)
-
-
-def get_md5(filepath):
-    # Open,close, read file and calculate MD5 on its contents
-    with open(filepath, 'rb') as file_to_check:
-        # read contents of the file
-        data = file_to_check.read()
-        # pipe contents of the file through
-        md5_returned = hashlib.md5(data).hexdigest()
-
-    # Finally compare original MD5 with freshly calculated
-    return md5_returned
-
-
-def rename_to_md5(filepath):
-    file_name = filepath.split("\\")[-1].split(".")[0]
-    new_name = get_md5(filepath)
+    new_name = get_sha256(filepath)
     new_path = filepath.replace(file_name, new_name)
     try:
         os.rename(filepath, new_path)
@@ -258,16 +253,16 @@ def rename_to_md5(filepath):
         os.remove(filepath)
 
 
-def get_md5(filepath):
-    # Open,close, read file and calculate MD5 on its contents
+def get_sha256(filepath):
+    # Open,close, read file and calculate sha256 on its contents
     with open(filepath, 'rb') as file_to_check:
         # read contents of the file
         data = file_to_check.read()
         # pipe contents of the file through
-        md5_returned = hashlib.md5(data).hexdigest()
+        sha256_returned = hashlib.sha256(data).hexdigest()
 
-    # Finally compare original MD5 with freshly calculated
-    return md5_returned
+    # Finally compare original sha256 with freshly calculated
+    return sha256_returned
 
 
 def webp_to_png_and_fix_gif(folder_path):
@@ -285,6 +280,7 @@ def webp_to_png_and_fix_gif(folder_path):
                 logging.error("Error occurred:", result.stderr.decode())
             else:
                 os.remove(webp_path)
+                rename_to_sha256(png_path)
 
         if ".gif" in file:
             gif_path = os.path.join(folder_path, file)
@@ -299,9 +295,50 @@ def webp_to_png_and_fix_gif(folder_path):
                 logging.error("Error occurred:", result.stderr.decode())
             else:
                 os.replace(temp_path, gif_path)
-                
+                rename_to_sha256(gif_path)
 
-def normal():
+
+def delete_if_found_duplicate(folder_path, existing_file_dict):
+    for file in os.listdir(folder_path):
+        f_hash = file.split(".")[0]
+        if file in existing_file_dict:
+            print(f"{existing_file_dict[f_hash]} 被证实为重复文件，hash值是 {f_hash}，删除之")
+            logging.warning(
+                f"{existing_file_dict[f_hash]} 被证实为重复文件，hash值是 {f_hash}，删除之")
+            # 删除！！！！
+            os.remove(os.path.join(folder_path, file))
+        else:
+            existing_file_dict[f_hash] = os.path.join(folder_path, file)
+
+    # 假如删除完毕，该文件夹为空，则直接删除整个文件夹
+    if len(os.listdir(folder_path)) == 0:
+        print(f"{folder_path} 为空，删除之")
+        logging.warning(f"{folder_path} 为空，删除之")
+        # 删除！！！！
+        shutil.rmtree(folder_path)
+
+
+def play():
+    # 获得要下载的文件的url列表
+    URLS = get_urls_from_download_txt(ICLOUD)
+
+    # 编制已经存在的所有文件的Hash值
+    existing_file_dict = {}
+
+    for author, _, files in os.walk(SAVE_DIRECTORY):
+        for file in files:
+            file_path = os.path.join(author, file)
+            f_hash = file.split(".")[0]
+            existing_file_dict[f_hash] = file_path
+
+    # 把已经精选过了的文件也算进来
+    for title, _, files in os.walk(r"D:\RMT\TRY\Wechat"):
+        for file in files:
+            file_path = os.path.join(title, file)
+            f_hash = file.split(".")[0]
+            existing_file_dict[f_hash] = file_path
+
+    # 正式开始下载工作
     for index, url in enumerate(URLS, start=1):
 
         soup, content = get_soup_from_webpage(url, HEADER, timeout=15)
@@ -327,7 +364,8 @@ def normal():
 
         if title.strip() in gfw_title:  # 此内容因违规无法查看前后有空段
             print(f"  {index} 来晚了，内容被和谐了。（；´д｀）ゞ  ".center(78, "#"))
-            logging.error(f"{title}  {url}  {index} 来晚了，内容被和谐了。（；´д｀）ゞ  ".center(78, "#"))
+            logging.error(
+                f"{title}  {url}  {index} 来晚了，内容被和谐了。（；´д｀）ゞ  ".center(78, "#"))
             print(title)
             print(url)
             print()
@@ -342,15 +380,9 @@ def normal():
         logging.info(title)
         logging.info(url)
 
-        # downlist = extract_image_url(soup)
-        # if not downlist:
-        #     print("cdn")
-        #     downlist = extract_image_from_cdn_version_page(content)
-
         downlist = extract_image_using_re_only(content)
         if not downlist:
-            print("wtf, chatGPT?!")
-
+            print("是时候去咨询一下chatGPT了")
 
         logging.info(downlist)
 
@@ -387,9 +419,114 @@ def normal():
 
         # Check and convert WebP to PNG and also fix Gif
         webp_to_png_and_fix_gif(folder_path)
+
+        # Figure out if any file has been duplicated with database record
+        delete_if_found_duplicate(folder_path, existing_file_dict)
+
         print()
 
 
-if __name__ == '__main__':
-    normal()
+class NotUseAnymore():
+    def test():
+        print()
 
+    def get_md5(filepath):
+        # Open,close, read file and calculate MD5 on its contents
+        with open(filepath, 'rb') as file_to_check:
+            # read contents of the file
+            data = file_to_check.read()
+            # pipe contents of the file through
+            md5_returned = hashlib.md5(data).hexdigest()
+
+        # Finally compare original MD5 with freshly calculated
+        return md5_returned
+
+    def extract_image_url(soup: BeautifulSoup) -> list:
+        raw_down_list = []
+        try:
+            tags = soup.find_all('img')
+            for n in tags:
+                raw_down_list.append(n['data-src'])
+        except:
+            # 从 2023-03-03 开始，微信使坏，开始用JavaScript来对图片地址进行隐藏
+            hidden_section = soup.find('div', id="js_content")
+            hidden_img_tags = hidden_section.find_all('img')
+            for n in hidden_img_tags:
+                raw_down_list.append(n['data-src'])
+
+        # 去重
+        downlist = list(set(raw_down_list))
+        return downlist
+
+    def extract_image_from_cdn_version_page(content: str) -> list:
+        pattern = r"cdn_url:\s*'([^']*)'"
+
+        raw_down_list = re.findall(pattern, content)
+        logging.info(raw_down_list)
+        cleaned_urls = [url.split("\\")[0] for url in raw_down_list]
+
+        if raw_down_list:
+            # 去重
+            downlist = list(set(cleaned_urls))
+            return downlist
+
+        else:
+            print("No image URLs found.")
+            return None
+
+    def rillatest():
+        print("让我们荡起双桨")
+
+    def input_url():
+        print('https://mp.weixin.qq.com/s/KAI2s49-pXLtPX7FudnRQg')
+        url = input('输入要下载的微信公众号的网址，格式如上： ')
+        return url
+
+    def try_soup_ten_times(url, header=HEADER):
+        soup_attemp = 0
+        success_status = False
+        while soup_attemp < 10 and not success_status:
+            try:
+                soup, content = get_soup_from_webpage(url, header, timeout=15)
+                title = find_title(url, soup)
+
+                if title == "autorestart":
+                    print(f"when opening\n{url}, error occur:")
+                success_status = True
+
+            except:
+                soup_attemp += 1
+                print("Seems the network is not very stable...")
+                print("Let's wait for 5 seconds.")
+                time.sleep(5)
+                print("Ok, let's try again.")
+                if soup_attemp == 10:
+                    print("Well, let it go.")
+                    return ("404", "404")
+        return soup, content, title
+
+    def big_pick():
+        for file in os.listdir(SAVE_DIRECTORY):
+            file_path = os.path.join(SAVE_DIRECTORY, file)
+            with Image.open(file_path) as picture:
+                image_width, image_height = picture.size
+            if image_height > 1001 and image_width > 1001:
+                shutil.move(file_path, r'D:\RMT\TRY\Review')
+
+    def cwtp(total_path):
+        # Conver WebP to PNG
+        if '.webp' in total_path:
+            print(f"Found Webp! {repr(total_path)}")
+            webp_to_png_and_fix_gif(repr(total_path))
+
+    def find_filename(img_url: str) -> str:
+        """
+        2024年7月25日
+        决定重写，把判断格式的逻辑放到下载器里面去
+        """
+        if 'mmbiz.qpic.cn' in img_url:
+            return img_url.split("/")[-2]
+
+
+if __name__ == '__main__':
+    play()
