@@ -1,4 +1,5 @@
 import hashlib
+import json
 import logging
 import os
 import shutil
@@ -20,11 +21,12 @@ from threading import Thread
 将WebP自动转换为PNG
 
 操作说明：
-从icloud那里把URL复制进来，放在download.txt中
+从icloud那里把URL复制到txt文件中
 然后执行，就可以在目标文件夹中生成以标题为文件夹名的文件夹，里面是帖子中的图片
 """
 
-# 2024年11月2日
+# 2024年11月4日
+# 重新启用数据库
 # 不再将重复文件移入临时文件夹，直接删除
 # 将原先的列表改进为txt文档
 # 发现漏下了一些图片，遂使用正则表达式一把梭
@@ -57,9 +59,9 @@ HEADER = {
 }
 
 STATIC = r"F:\Lab\libwebp-1.4.0-windows-x64\bin\dwebp.exe"
-SAVE_DIRECTORY = r"D:\RMT\TRY\tecent public"
-DATABSE = r"D:\RMT\TRY\Wechat\wc.json"
-ICLOUD = r"D:\RMT\TRY\Wechat\download.txt"
+SAVE_DIRECTORY = r"D:\RMT\Tencent Wechat\tecent public"
+DATABSE = r"D:\RMT\Tencent Wechat\Wechat\wc.json"
+ICLOUD = r"D:\RMT\Tencent Wechat\Wechat\download.txt"
 
 
 def get_urls_from_download_txt(ICLOUD):
@@ -123,6 +125,7 @@ def make_name_valid(validname: str) -> str:
     # \xa0 Unicode represents a hard space or a no-break space in a program.
     validname = validname.replace('\xa0', '')
     validname = validname.replace('～', '')
+    validname = validname.replace('📷', '').replace('🎈', '').replace('😜', '')
     # 在 Windows 系统中建立文件夹时名字的最后不能是“．”，不论你加多少个点，都会被 Windows 忽略。
     validname = validname.rstrip(".")
     validname = validname.strip()
@@ -130,28 +133,44 @@ def make_name_valid(validname: str) -> str:
 
 
 def extract_image_using_re_only(content: str) -> list:
-    # cdn_url: 'https://mmbiz.qpic.cn/mmbiz_jpg/AicOhKNCfiaD9SHrapreD260eWviaANiaB100VoiasAeZicAo7Hl0qVTwKfzAUWB5Su4zhuQrtWK4OCwcgCnibUUbaL1g/0?wx_fmt=jpeg',
-    # 'cdn_url':'https://mmbiz.qpic.cn/sz_mmbiz_gif/r7UskC2NBNCgceEu9iazYtvRMKezh8uAgScic6l4aM2BWwwcibmh50ofnI5uiaGAKRwDvXvWZYAS9VZdLttNhGDIxQ/640?wx_fmt=gif\x26amp;amp;from=appmsg'
-
     pattern = r"(?:['\"]?cdn_url['\"]?)\s*:\s*['\"]https?://mmbiz[^\s\"']*['\"]"
 
-    cdn_urls = re.findall(pattern, content)
+    raw_urls = re.findall(pattern, content)
 
-    logging.debug(cdn_urls)
+    logging.debug(raw_urls)
 
-    if cdn_urls:
-        # https://mmbiz.qpic.cn/mmbiz_jpg/AicOhKNCfiaD9SHrapreD260eWviaANiaB100VoiasAeZicAo7Hl0qVTwKfzAUWB5Su4zhuQrtWK4OCwcgCnibUUbaL1g/0?wx_fmt=jpeg
-        cleaned_urls = [url.replace(" ", "").split(
-            ":'")[-1].split("\\")[0] for url in cdn_urls]
+    if raw_urls:
+        pure_urls = [url.replace(" ", "").split(
+            ":'")[-1].split("\\")[0] for url in raw_urls]
 
         # 去重
-        downlist = list(set(cleaned_urls))
+        downlist = list(set(pure_urls))
 
         return downlist
 
     else:
-        print("No image URLs found.")
-        return None
+        # 早期链接形式为
+        # data-src="https://mmbiz.qpic.cn/sz_mmbiz_png/MVPvEL7Qg0G6NN3oSIm4CuPDWGQo3LX6fRzicLvdbmssAa1qwOibrXjeNicbziaca2K5RQFZg6X5NdUVXYvK9rkiaBA/640?wx_fmt=png"
+        pattern = r"(?:data-src=['\"]?)\s*['\"]https?://mmbiz[^\s\"']*['\"]"
+
+        raw_urls = re.findall(pattern, content)
+
+        print("发现古早链接形式，使用后备解析方法。")
+        logging.info("发现古早链接形式，使用后备解析方法。")
+        logging.debug(f"2nd raw_urls:\n{raw_urls}")
+
+        if raw_urls:
+            pure_urls = [url.split("data-src=")[-1].replace('"', '')
+                         for url in raw_urls]
+
+            # 去重
+            downlist = list(set(pure_urls))
+
+            return downlist
+
+        else:
+            print("No image URLs found.")
+            return None
 
 
 def find_title(url: str, soup: BeautifulSoup) -> str:
@@ -301,10 +320,10 @@ def webp_to_png_and_fix_gif(folder_path):
 def delete_if_found_duplicate(folder_path, existing_file_dict):
     for file in os.listdir(folder_path):
         f_hash = file.split(".")[0]
-        if file in existing_file_dict:
-            print(f"{existing_file_dict[f_hash]} 被证实为重复文件，hash值是 {f_hash}，删除之")
+        if f_hash in existing_file_dict:
+            print(f"{existing_file_dict[f_hash]} 曾经下载过，hash值是 {f_hash}，删除之")
             logging.warning(
-                f"{existing_file_dict[f_hash]} 被证实为重复文件，hash值是 {f_hash}，删除之")
+                f"{existing_file_dict[f_hash]} 曾经下载过，hash值是 {f_hash}，删除之")
             # 删除！！！！
             os.remove(os.path.join(folder_path, file))
         else:
@@ -318,25 +337,50 @@ def delete_if_found_duplicate(folder_path, existing_file_dict):
         shutil.rmtree(folder_path)
 
 
+def read_json() -> dict:
+    '''
+    从DATABASE中读取字典文件
+    '''
+    with open(DATABSE, 'r') as f:
+        return json.load(f)
+
+
+def write_json(stored_dict: dict) -> None:
+    with open(DATABSE, 'w') as f:
+        json.dump(stored_dict, f)
+
+
+def resume_from_breakpoint(existing_file_dict):
+    '''
+    断点续传功能
+    '''
+    is_rfb_needed = False
+    # 先检测一下看看SAVE_DIRECTORY文件夹里面有没有东西
+    with os.scandir(SAVE_DIRECTORY) as it:
+        if any(it):
+            print("检测到SAVE_DIRECTORY文件夹中存在文件，可能是上次任务中断引起，将启动断点续传功能")
+            logging.info("检测到SAVE_DIRECTORY文件夹中存在文件，可能是上次任务中断引起，将启动断点续传功能")
+            is_rfb_needed = True
+
+    if is_rfb_needed:
+        for author, _, files in os.walk(SAVE_DIRECTORY):
+            for file in files:
+                file_path = os.path.join(author, file)
+                f_hash = file.split(".")[0]
+                existing_file_dict[f_hash] = file_path
+
+
 def play():
     # 获得要下载的文件的url列表
     URLS = get_urls_from_download_txt(ICLOUD)
 
-    # 编制已经存在的所有文件的Hash值
-    existing_file_dict = {}
+    if duplicate_filter:
+        # 从存档中读取所有文件的Hash值
+        print("正在读取存档，请稍候")
+        existing_file_dict = read_json()
 
-    for author, _, files in os.walk(SAVE_DIRECTORY):
-        for file in files:
-            file_path = os.path.join(author, file)
-            f_hash = file.split(".")[0]
-            existing_file_dict[f_hash] = file_path
-
-    # 把已经精选过了的文件也算进来
-    for title, _, files in os.walk(r"D:\RMT\TRY\Wechat"):
-        for file in files:
-            file_path = os.path.join(title, file)
-            f_hash = file.split(".")[0]
-            existing_file_dict[f_hash] = file_path
+        # 断点续传功能，把SAVE_DIRECTORY文件夹里面的文件的Hash值也添加到字典中去
+        resume_from_breakpoint(existing_file_dict)
 
     # 正式开始下载工作
     for index, url in enumerate(URLS, start=1):
@@ -383,6 +427,8 @@ def play():
         downlist = extract_image_using_re_only(content)
         if not downlist:
             print("是时候去咨询一下chatGPT了")
+            logging.critical("未能发现任何链接，是时候去咨询一下chatGPT了")
+            continue
 
         logging.info(downlist)
 
@@ -420,10 +466,16 @@ def play():
         # Check and convert WebP to PNG and also fix Gif
         webp_to_png_and_fix_gif(folder_path)
 
-        # Figure out if any file has been duplicated with database record
-        delete_if_found_duplicate(folder_path, existing_file_dict)
+        if duplicate_filter:
+            # Figure out if any file has been duplicated with database record
+            delete_if_found_duplicate(folder_path, existing_file_dict)
 
         print()
+
+    if duplicate_filter:
+        # 将新的所有文件的Hash值写回到存档中
+        print("正在写入存档，请稍候")
+        write_json(existing_file_dict)
 
 
 class NotUseAnymore():
@@ -511,7 +563,7 @@ class NotUseAnymore():
             with Image.open(file_path) as picture:
                 image_width, image_height = picture.size
             if image_height > 1001 and image_width > 1001:
-                shutil.move(file_path, r'D:\RMT\TRY\Review')
+                shutil.move(file_path, r'D:\RMT\Tencent Wechat\Review')
 
     def cwtp(total_path):
         # Conver WebP to PNG
@@ -527,6 +579,29 @@ class NotUseAnymore():
         if 'mmbiz.qpic.cn' in img_url:
             return img_url.split("/")[-2]
 
+    def Abandon():
+        # for author, _, files in os.walk(SAVE_DIRECTORY):
+        #     for file in files:
+        #         file_path = os.path.join(author, file)
+        #         f_hash = file.split(".")[0]
+        #         existing_file_dict[f_hash] = file_path
+
+        # # 把已经精选过了的文件也算进来
+        # for title, _, files in os.walk(r"D:\RMT\Tencent Wechat\Wechat"):
+        #     for file in files:
+        #         if '.txt' in file:
+        #             continue
+        #         if '.json' in file:
+        #             continue
+        #         file_path = os.path.join(title, file)
+        #         f_hash = file.split(".")[0]
+        #         existing_file_dict[f_hash] = file_path
+
+        # write_json(existing_file_dict)
+        pass
+
 
 if __name__ == '__main__':
+    # 过滤器开关
+    duplicate_filter = True
     play()
